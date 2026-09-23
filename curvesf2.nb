@@ -1,0 +1,154 @@
+In[132]:=
+In[192]:=
+In[338]:=
+(* ======================================================
+   Weighted Losses -- Tanks for Nuttin' (power-law timing factor, v3)
+   Same structure as curvesf.nb, but:
+     - gamma applies directly to Min[w/p,1], not to (1-Min[w/p,1]):
+         lw(n,w) = 1 - f(n)*(1 - Min[w/p,1]^gamma)
+     - f(n) = A*(n-Nthresh)^k has its amplitude A fixed at 0.25
+       (chosen to keep the jump in lw right after Nthresh small,
+       since f(Nthresh+1) = A exactly, regardless of k)
+     - k, p, gamma are solved (not chosen) so that:
+         f(Nthresh)     = 0      (automatic for any A, k)
+         f(Nmax)        = 2
+         lw(Nmax, 0.4)  = 0
+         CWL(Nmax, 0.2) == CWL(Nmax, 0.4)
+   ====================================================== *)
+
+
+
+Nmax = 82;
+Amp = 0.25;
+fNmaxTarget = 2;
+k = Log[fNmaxTarget/Amp]/Log[Nmax - Nthresh];
+f[n_] := Amp*(n - Nthresh)^k;
+Print["Nthresh = ", Nthresh, "   k = ", k]
+
+(* Weighted loss value for the n-th game given constant win rate w,
+   as a function of p and gamma (not yet numeric). gamma now applies
+   directly to Min[w/p,1], not to the difference (1-Min[w/p,1]). *)
+lwPG[n_, w_, pp_, gg_] := If[n <= Nthresh,
+  1,
+  1 - f[n] (1 - Min[w/pp, 1]^gg)
+];
+
+(* Solve for p and gamma so that lw(Nmax,0.4)=0 and
+   CWL(Nmax,0.2) = CWL(Nmax,0.4), where
+   CWL(N,w) = (1-w)*Sum[lw(n,w), {n,1,N}] *)
+S02[pp_, gg_] := Sum[lwPG[n, 0.2, pp, gg], {n, 1, Nmax}];
+S04[pp_, gg_] := Sum[lwPG[n, 0.4, pp, gg], {n, 1, Nmax}];
+
+sol = FindRoot[
+  {lwPG[Nmax, 0.4, pp, gg] == 0,
+   0.8*S02[pp, gg] == 0.6*S04[pp, gg]},
+  {{pp, 0.82}, {gg, 1}},
+  WorkingPrecision -> 20
+];
+p     = pp /. sol;
+gamma = gg /. sol;
+Print["p = ", N[p, 10], "   gamma = ", N[gamma, 10]]
+
+(* Verify the calibration *)
+lw[n_, w_] := lwPG[n, w, p, gamma];
+CWL[N_Integer, w_] := Sum[(1 - w) lw[n, w], {n, 1, N}];
+Print["f(Nmax) = ", N[f[Nmax], 8], "   (should be ", fNmaxTarget, ")"]
+Print["lw(Nmax,0.4) = ", N[lw[Nmax, 0.4], 8], "   (should be 0)"]
+Print["CWL(Nmax,0.2) = ", N[CWL[Nmax, 0.2], 10]]
+Print["CWL(Nmax,0.4) = ", N[CWL[Nmax, 0.4], 10], "   (should match above)"]
+
+(* Win rates to compare *)
+winRates = {0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7};
+labels   = {"W = 0.01","W = 0.10","W = 0.20", "W = 0.30", "W = 0.40",
+            "W = 0.50","W = 0.60","W = 0.70"};
+colors   = {Blue, Red, Darker@Green, Black, Orange,
+            Purple, Brown, Cyan};
+
+data = Table[
+  Table[{n, CWL[n, w]}, {n, 1, Nmax}],
+  {w, winRates}
+];
+
+ListLinePlot[data,
+  PlotStyle   -> colors,
+  PlotLegends -> Placed[
+    LineLegend[colors, labels, LegendLabel -> "Win Rate"],
+    {Left, Top}],
+  FrameLabel  -> {
+    {Style["Cumulative Weighted Losses", Bold], None},
+    {Style["Games Played (N)", Bold], None}},
+  PlotLabel   -> Style["Cumulative Weighted Losses vs Games Played (curvesf2)", Bold, 14],
+  PlotRange   -> {{1, Nmax}, All},
+  GridLines   -> Automatic,
+  GridLinesStyle -> Directive[LightGray, Dashed],
+  Frame       -> True,
+  ImageSize   -> Large
+]
+
+(* Individual game weighted loss value vs game number *)
+dataIndiv = Table[
+  Table[{n, lw[n, w]}, {n, 1, Nmax}],
+  {w, winRates}
+];
+
+ListLinePlot[dataIndiv,
+  PlotStyle   -> colors,
+  PlotLegends -> Placed[
+    LineLegend[colors, labels, LegendLabel -> "Win Rate"],
+    {Left, Bottom}],
+  FrameLabel  -> {
+    {Style["Weighted Loss Value", Bold], None},
+    {Style["Game Number (n)", Bold], None}},
+  PlotLabel   -> Style["Weighted Loss Value per Game vs Game Number (curvesf2)", Bold, 14],
+  PlotRange   -> {{1, Nmax}, All},
+  GridLines   -> Automatic,
+  GridLinesStyle -> Directive[LightGray, Dashed],
+  Frame       -> True,
+  ImageSize   -> Large
+]
+
+During evaluation of In[338]:= k = 0.552866   f(Nthresh+1) = 0.25
+During evaluation of In[338]:= FindRoot::precw: The precision of the argument function ({1-2. (1-Min[<<2>>]^gg)==0,0.8 (83-56.3362 (1-Power[<<2>>]))==0.6 (83-56.3362 (1-Power[<<2>>]))}) is less than WorkingPrecision (20.`).
+During evaluation of In[338]:= p = 0.8222173759   gamma = 0.9619825823
+During evaluation of In[338]:= f(Nmax) = 2.   (should be 2)
+During evaluation of In[338]:= lw(Nmax,0.4) = 0.   (should be 0)
+During evaluation of In[338]:= CWL(Nmax,0.2) = 32.8991
+During evaluation of In[338]:= CWL(Nmax,0.4) = 32.8991   (should match above)
+Out[378]= 
+Out[383]= 
+In[385]:= Export["C:\\Users\\gawater\\Documents\\GitHub\\Tanking\\graphics\\weight losses 2f.png",%383,"PNG"]
+Out[385]= C:\Users\gawater\Documents\GitHub\Tanking\graphics\weight losses 2f.png
+In[337]:= Export["C:\\Users\\gawater\\Documents\\GitHub\\Tanking\\graphics\\cumulative losses 2f.png",%330,"PNG"]
+Out[337]= C:\Users\gawater\Documents\GitHub\Tanking\graphics\cumulative losses 2f.png
+In[387]:= lw[77,18/77 ]
+Out[387]= -0.291627
+During evaluation of In[192]:= SetDelayed::write: Tag In in In[338] is Protected.
+During evaluation of In[192]:= Nthresh = 40   k = 0.556347
+During evaluation of In[192]:= FindRoot::precw: The precision of the argument function ({1-2. (1-Min[<<2>>]^gg)==0,0.8 (82-54.9276 (1-Power[<<2>>]))==0.6 (82-54.9276 (1-Power[<<2>>]))}) is less than WorkingPrecision (20.`).
+During evaluation of In[192]:= p = 0.8057604390   gamma = 0.9897550708
+During evaluation of In[192]:= f(Nmax) = 2.   (should be 2)
+During evaluation of In[192]:= lw(Nmax,0.4) = 0.   (should be 0)
+During evaluation of In[192]:= CWL(Nmax,0.2) = 32.7217
+During evaluation of In[192]:= CWL(Nmax,0.4) = 32.7217   (should match above)
+Out[227]= 
+Out[232]= 
+During evaluation of In[132]:= SetDelayed::write: Tag In in In[192] is Protected.
+During evaluation of In[132]:= Nthresh = 40   k = 0.556347
+During evaluation of In[132]:= FindRoot::precw: The precision of the argument function ({1-2. (1-Min[<<2>>]^gg)==0,0.8 (82-54.9276 (1-Power[<<2>>]))==0.6 (82-54.9276 (1-Power[<<2>>]))}) is less than WorkingPrecision (20.`).
+During evaluation of In[132]:= p = 0.8057604390   gamma = 0.9897550708
+During evaluation of In[132]:= f(Nmax) = 2.   (should be 2)
+During evaluation of In[132]:= lw(Nmax,0.4) = 0.   (should be 0)
+During evaluation of In[132]:= CWL(Nmax,0.2) = 32.7217
+During evaluation of In[132]:= CWL(Nmax,0.4) = 32.7217   (should match above)
+Out[166]= 
+Out[171]= 
+During evaluation of In[132]:= SetDelayed::write: Tag Times in During evaluation of In[338] is Protected.
+Out[173]= $Failed
+During evaluation of In[132]:=
+Syntax::sntxf: "" cannot be followed by "===============================".
+During evaluation of In[132]:=
+Syntax::sntxf: "" cannot be followed by "=======================".
+During evaluation of In[132]:=
+Syntax::sntxf: "" cannot be followed by "In[192]:=".
+In[174]:= Nthresh=40
+Out[174]= 40
